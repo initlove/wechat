@@ -3,6 +3,10 @@
 #include <stdlib.h>
 #include <string.h>
 
+gchar *public_name [] = {
+
+};
+
 enum msg_type {
 	MSG_WORD,
 	MSG_EXPRESS,
@@ -163,6 +167,7 @@ load_content (gchar *filename)
 			} else {
 				status = LOAD_END;
 				if (msg) {
+/*We use prepend,  because the log is upside down.. */
 					msgs = g_list_prepend (msgs, msg);
 				}
 				break;
@@ -187,10 +192,59 @@ load_content (gchar *filename)
 	return msgs;
 }
 
-typedef struct _user_count_info {
-	gchar *name;
-	gint count;
-} user_count_info;
+static void
+user_been_at_count (GList *msgs)
+{
+	GList *l;
+	wechat_msg *msg;
+
+	gint tails = 0;
+	gchar *names[128];
+	gint counts[128];
+	gint i;
+	gint found;
+
+	for (i = 0; i < 128; i++) {
+		names[i] = NULL;
+		counts[i] = 0;
+	}
+
+	for (l = msgs; l; l = l->next) {
+		gchar *content;
+		gchar *name;
+		gchar *p_at, *p;
+		msg = (wechat_msg *) (l->data);
+		content = msg->content;
+		if (!content)
+			continue;
+
+		p_at = strchr (content, '@');
+		if (p_at) {
+			found = 0;
+			name = p_at + 1;
+			for (p = name; *p; p++) {
+				if ((*p == ' ') || (*p == '?'))
+					*p = '\0';
+			}
+			for (i = 0; i < tails; i++) {
+				if (strcmp (names[i], name) == 0) {
+					found = 1;
+					break;
+				}
+			}
+			if (!found) {
+				names[tails] = g_strdup (name);
+				i = tails;
+				tails ++;
+			}
+			counts [i] ++;
+		}
+	}
+
+	for (i = 0; i < tails; i++) {
+		printf ("%05d [%s]\n", counts[i], names[i]);
+	}
+}
 
 static void
 user_count (GList *msgs)
@@ -233,6 +287,181 @@ user_count (GList *msgs)
 	}
 }
 
+static void
+day_count (GList *msgs)
+{
+	gchar *days[512];
+	gint   days_counts[512];
+	gint i;
+	GList *l;
+	gint tail;
+	wechat_msg *msg;
+	
+	for (i = 0; i < 512; i ++) {
+		days[i] = NULL;
+		days_counts[i] = 0;	
+	}
+	tail = -1;
+	for (l = msgs; l ; l = l->next) {
+		gchar *day;
+		msg = (wechat_msg *) (l->data);
+		day = msg->head[HEAD_DATE];
+
+		if ((tail == -1) || (strcmp (days[tail], day) != 0)) {
+			tail ++;
+			days[tail] = g_strdup (day);
+		} else {
+			/* already exist */
+		}
+			
+		days_counts [tail] ++;
+	}
+
+	printf ("Day count\n");
+	for (i = 0; i < tail; i++) {
+		printf ("%05d [%s]\n", days_counts[i], days[i]);
+	}
+
+	printf ("\n\nWeek count\n");
+	int j;
+	for (i = 0; i < tail; i = i + 7) {
+		gint week_count = 0;
+	 	for (j = 0; j < 7; j++) {
+			week_count += days_counts[i+j];
+		}
+		
+		printf ("%05d [%s]\n", week_count, days[i]);
+	}
+}
+
+		
+static gint
+if_new_topic (wechat_msg *msg, wechat_msg *last_msg)
+{
+	if (msg == NULL)
+		return 0;
+	if (last_msg == NULL)
+		return 1;
+	/* if no body reply in 15 minutes */
+	gchar *new_time = msg->head[HEAD_TIME];
+	gchar *last_time = last_msg->head[HEAD_TIME];
+	gint new_i;
+	gint last_i;
+	gint gap;
+        char *p;
+	if (new_time == NULL)
+		return 0;
+	if (last_time == NULL)
+		return 1;
+
+        p = strchr (new_time, ':');
+	if (!p)
+		return 0;
+        new_i = atoi (new_time)*60+ atoi(p+1);
+
+        p = strchr (last_time, ':');
+	if (!p)
+		return 1;
+        last_i = atoi (last_time)*60+ atoi(p+1);
+
+	if (new_i < last_i)
+		new_i + 60*24;
+	gap = new_i - last_i;
+	
+	if (gap > 15) {
+		return 1;
+	} else {
+		return 0;
+	}
+}
+
+/* who start most topic with reply */
+static void
+topic_start (GList *msgs)
+{
+	GList *l;
+	wechat_msg *msg;
+
+	gint new_tails = 0;
+	gint end_tails = 0;
+	gchar *new_names[128];
+	gint new_counts[128];
+	gchar *end_names[128];
+	gint end_counts[128];
+	gint i;
+	gint found;
+	wechat_msg *last_msg = NULL;
+
+	for (i = 0; i < 128; i++) {
+		new_names[i] = NULL;
+		new_counts[i] = 0;
+		end_names[i] = NULL;
+		end_counts[i] = 0;
+	}
+
+	for (l = msgs; l; l = l->next) {
+		gchar *head_time;
+		gchar *name;
+		gchar *p_at, *p;
+		gint new_topic;
+
+		msg = (wechat_msg *) (l->data);
+		head_time = msg->head[HEAD_TIME];
+
+		if (!head_time)
+			continue;
+
+		new_topic = if_new_topic (msg, last_msg);
+		/*话题开始者*/
+		if (new_topic) {
+			gint new_i;
+			found = 0;
+			gchar *new_name = msg->head[HEAD_NAME];
+			for (new_i = 0; new_i < new_tails; new_i++) {
+				if (strcmp (new_names[new_i], new_name) == 0) {
+					found = 1;
+					break;
+				}
+			}
+			if (!found) {
+				new_names[new_tails] = g_strdup (new_name);
+				new_i = new_tails;
+				new_tails ++;
+			}
+			new_counts [new_i] ++;
+		}
+		/*话题终结者 */
+		if (new_topic && (last_msg)) {
+			gint end_i;
+			found = 0;
+			gchar *end_name = last_msg->head[HEAD_NAME];
+			for (end_i = 0; end_i < end_tails; end_i++) {
+				if (strcmp (end_names[end_i], end_name) == 0) {
+					found = 1;
+					break;
+				}
+			}
+			if (!found) {
+				end_names[end_tails] = g_strdup (end_name);
+				end_i = end_tails;
+				end_tails ++;
+			}
+			end_counts [end_i] ++;
+		}
+		last_msg = msg;
+	}
+
+	printf ("\n\nStart topic\n");
+	for (i = 0; i < new_tails; i++) {
+		printf ("%05d [%s]\n", new_counts[i], new_names[i]);
+	}
+
+	printf ("\n\nEnd topic\n");
+	for (i = 0; i < end_tails; i++) {
+		printf ("%05d [%s]\n", end_counts[i], end_names[i]);
+	}
+}
+
 int main ()
 {
         gchar *filename = "../data/3537003311@chatroom_20141118091245.txt.utf8-remove-system";
@@ -242,7 +471,10 @@ int main ()
 
 	msgs = load_content (filename);
 
-	user_count (msgs);
+//	user_count (msgs);
+//	user_been_at_count (msgs);
+//	day_count (msgs);
+	topic_start (msgs);
 
 #ifdef WHOLE_DEBUG
 	for (l = msgs; l; l = l->next) {
