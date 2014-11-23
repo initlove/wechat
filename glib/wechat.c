@@ -462,6 +462,129 @@ topic_start (GList *msgs)
 	}
 }
 
+static void
+express_count (GList *msgs)
+{
+	GList *l;
+	wechat_msg *msg;
+
+	gint tails = 0;
+	gchar *names[128];
+	gint counts[128];
+	gint i;
+	gint found;
+
+	for (i = 0; i < 128; i++) {
+		names[i] = NULL;
+		counts[i] = 0;
+	}
+
+	for (l = msgs; l; l = l->next) {
+		gchar *content;
+		gchar *name;
+		gchar *p;
+
+		found = 0;
+		msg = (wechat_msg *) (l->data);
+		if (strcmp (msg->head[HEAD_MSG_TYPE], "表情") == 0) {
+			found == 1;
+		} else {
+			content = msg->content;
+			if (!content)
+				continue;
+			p = strchr (content, '[');
+			if (p) {
+				found = 1;
+			}
+		}
+		if (!found)
+			continue;
+		found = 0;
+		name = msg->head[HEAD_NAME];
+		for (i = 0; i < tails; i++) {
+			if (strcmp (names[i], name) == 0) {
+				found = 1;
+				break;
+			}
+		}
+			
+		if (!found) {
+			names[tails] = g_strdup (name);
+			i = tails;
+			tails ++;
+		}
+		counts [i] ++;
+	}
+
+	for (i = 0; i < tails; i++) {
+		printf ("%05d [%s]\n", counts[i], names[i]);
+	}
+}
+
+static void
+express_rate_count (GList *msgs)
+{
+	GList *l;
+	wechat_msg *msg;
+
+	gint tails = 0;
+	gchar *names[128];
+	gint whole_counts[128];
+	gint counts[128];
+	gint i;
+	gint found;
+
+	for (i = 0; i < 128; i++) {
+		names[i] = NULL;
+		counts[i] = 0;
+		whole_counts[i] = 0;
+	}
+
+	for (l = msgs; l; l = l->next) {
+		gchar *content;
+		gchar *name;
+		gchar *p;
+		gint express_found;
+
+		express_found = 0;
+		msg = (wechat_msg *) (l->data);
+		if (strcmp (msg->head[HEAD_MSG_TYPE], "表情") == 0) {
+			express_found == 1;
+		} else {
+			content = msg->content;
+			if (content) {
+				p = strchr (content, '[');
+				if (p) {
+					express_found = 1;
+				}
+			}
+		}
+		found = 0;
+		name = msg->head[HEAD_NAME];
+		for (i = 0; i < tails; i++) {
+			if (strcmp (names[i], name) == 0) {
+				found = 1;
+				break;
+			}
+		}
+			
+		if (!found) {
+			names[tails] = g_strdup (name);
+			i = tails;
+			tails ++;
+		}
+		whole_counts [i] ++;
+		if (express_found)
+			counts[i]++;
+	}
+
+	for (i = 0; i < tails; i++) {
+/* talkive: 至少每天说一句话*/
+		if (whole_counts[i] < 365)
+			continue;
+		printf ("%05f %s %05d %05d\n", 1.0 * counts[i]/whole_counts[i], names[i], counts[i], whole_counts[i]);
+	}
+}
 int main ()
 {
         gchar *filename = "../data/3537003311@chatroom_20141118091245.txt.utf8-remove-system";
@@ -474,7 +597,9 @@ int main ()
 //	user_count (msgs);
 //	user_been_at_count (msgs);
 //	day_count (msgs);
-	topic_start (msgs);
+//	topic_start (msgs);
+//	express_count (msgs);
+	express_rate_count (msgs);
 
 #ifdef WHOLE_DEBUG
 	for (l = msgs; l; l = l->next) {
