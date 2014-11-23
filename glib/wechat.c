@@ -585,6 +585,345 @@ express_rate_count (GList *msgs)
 		printf ("%05f %s %05d %05d\n", 1.0 * counts[i]/whole_counts[i], names[i], counts[i], whole_counts[i]);
 	}
 }
+
+static void
+pic_count (GList *msgs)
+{
+	GList *l;
+	wechat_msg *msg;
+
+	gint tails = 0;
+	gchar *names[128];
+	gint counts[128];
+	gint i;
+	gint found;
+
+	for (i = 0; i < 128; i++) {
+		names[i] = NULL;
+		counts[i] = 0;
+	}
+
+	for (l = msgs; l; l = l->next) {
+		gchar *content;
+		gchar *name;
+		gchar *p;
+
+		msg = (wechat_msg *) (l->data);
+		if (strcmp (msg->head[HEAD_MSG_TYPE], "图片") != 0) {
+			continue;
+		}
+		found = 0;
+		name = msg->head[HEAD_NAME];
+		for (i = 0; i < tails; i++) {
+			if (strcmp (names[i], name) == 0) {
+				found = 1;
+				break;
+			}
+		}
+			
+		if (!found) {
+			names[tails] = g_strdup (name);
+			i = tails;
+			tails ++;
+		}
+		counts [i] ++;
+	}
+
+	for (i = 0; i < tails; i++) {
+		printf ("%05d [%s]\n", counts[i], names[i]);
+	}
+}
+
+static void
+pic_rate_count (GList *msgs)
+{
+	GList *l;
+	wechat_msg *msg;
+
+	gint tails = 0;
+	gchar *names[128];
+	gint counts[128];
+	gint whole_counts[128];
+	gint i;
+	gint found;
+
+	for (i = 0; i < 128; i++) {
+		names[i] = NULL;
+		counts[i] = 0;
+		whole_counts[i] = 0;
+	}
+
+	for (l = msgs; l; l = l->next) {
+		gchar *content;
+		gchar *name;
+		gchar *p;
+		gint pic_found = 0;
+		msg = (wechat_msg *) (l->data);
+		if (strcmp (msg->head[HEAD_MSG_TYPE], "图片") == 0) {
+			pic_found = 1;
+		}
+		found = 0;
+		name = msg->head[HEAD_NAME];
+		for (i = 0; i < tails; i++) {
+			if (strcmp (names[i], name) == 0) {
+				found = 1;
+				break;
+			}
+		}
+			
+		if (!found) {
+			names[tails] = g_strdup (name);
+			i = tails;
+			tails ++;
+		}
+		if (pic_found)
+			counts [i] ++;
+		whole_counts[i]++;
+	}
+
+	for (i = 0; i < tails; i++) {
+		if (whole_counts[i]<365)
+			continue;
+		printf ("%05f %s %05d %05d\n", 1.0 * counts[i]/whole_counts[i], names[i], counts[i], whole_counts[i]);
+	}
+}
+
+
+static void
+link_count (GList *msgs)
+{
+	GList *l;
+	wechat_msg *msg;
+
+	gint tails = 0;
+	gchar *names[128];
+	gint counts[128];
+	gint i;
+	gint found;
+
+	for (i = 0; i < 128; i++) {
+		names[i] = NULL;
+		counts[i] = 0;
+	}
+
+	for (l = msgs; l; l = l->next) {
+		gchar *content;
+		gchar *name;
+		gchar *p;
+
+		msg = (wechat_msg *) (l->data);
+		if (strcmp (msg->head[HEAD_MSG_TYPE], "网页消息") != 0) {
+			continue;
+		}
+		found = 0;
+		name = msg->head[HEAD_NAME];
+		for (i = 0; i < tails; i++) {
+			if (strcmp (names[i], name) == 0) {
+				found = 1;
+				break;
+			}
+		}
+			
+		if (!found) {
+			names[tails] = g_strdup (name);
+			i = tails;
+			tails ++;
+		}
+		counts [i] ++;
+	}
+
+	for (i = 0; i < tails; i++) {
+		printf ("%05d [%s]\n", counts[i], names[i]);
+	}
+}
+
+static void
+link_rate_count (GList *msgs)
+{
+	GList *l;
+	wechat_msg *msg;
+
+	gint tails = 0;
+	gchar *names[128];
+	gint counts[128];
+	gint whole_counts[128];
+	gint i;
+	gint found;
+
+	for (i = 0; i < 128; i++) {
+		names[i] = NULL;
+		counts[i] = 0;
+		whole_counts[i] = 0;
+	}
+
+	for (l = msgs; l; l = l->next) {
+		gchar *content;
+		gchar *name;
+		gchar *p;
+		gint pic_found = 0;
+		msg = (wechat_msg *) (l->data);
+		if (strcmp (msg->head[HEAD_MSG_TYPE], "网页消息") == 0) {
+			pic_found = 1;
+		}
+		found = 0;
+		name = msg->head[HEAD_NAME];
+		for (i = 0; i < tails; i++) {
+			if (strcmp (names[i], name) == 0) {
+				found = 1;
+				break;
+			}
+		}
+			
+		if (!found) {
+			names[tails] = g_strdup (name);
+			i = tails;
+			tails ++;
+		}
+		if (pic_found)
+			counts [i] ++;
+		whole_counts[i]++;
+	}
+
+	for (i = 0; i < tails; i++) {
+		if (whole_counts[i]<365)
+			continue;
+		printf ("%05f %s %05d %05d\n", 1.0 * counts[i]/whole_counts[i], names[i], counts[i], whole_counts[i]);
+	}
+}
+
+static int
+is_zhuanzai (char *content)
+{
+	/* Most possibility, zhuanzai should be long .. */
+	/* 240对应大概8,9行字*/
+	/* 越少越好 */
+	if ((content == NULL) || (strlen (content) <240)) {
+		return 0;
+	}
+	gchar *school[] = {"通知", "MBA", "学期", "复习", "考试", "明商",
+			"明德", "明法", "教室", "题目", "作业",
+			"必修", "选修", 
+			"作业", "学院", "人大", "专业", 
+			"13级", "12级", "14级", "班级",
+			"人民大学", "老师", "同学", NULL};
+	gchar *p6[] = {"P6", "六班", "p6", "生日快乐", "生快", "@", 
+			"唐门", "晔", "凝", "九爷", "石头", "舰长", 
+			"超人", "王超", "储超", "修楠", "张强", "马琳", NULL};
+/*鸡汤一般是第三人称? */
+	gchar *guess [] = {"我", NULL};
+	gint i;
+
+	for (i = 0; school[i]; i++) {
+		if (strstr (content, school[i])) {
+			return 0;
+		}
+	}
+	for (i = 0; p6[i]; i++) {
+		if (strstr (content, p6[i])) {
+			return 0;
+		}
+	}
+	return 1;
+}
+
+static void
+whole_zhuanzai_count (GList *msgs)
+{
+	GList *l;
+	wechat_msg *msg;
+
+	gint link_count;
+	gint zhuanzai_count;
+	gint whole_count;
+	gint i;
+
+	link_count = 0;
+	zhuanzai_count = 0;
+	whole_count = 0;
+
+	for (l = msgs; l; l = l->next) {
+		gchar *content;
+		gchar *name;
+		gchar *p;
+		gint zhuanzai_found;
+
+		msg = (wechat_msg *) (l->data);
+
+		/*统计所有*/
+		whole_count ++;
+		if (strcmp (msg->head[HEAD_MSG_TYPE], "网页消息") == 0) {
+			link_count ++;
+			continue;
+		}
+		if (strcmp (msg->head[HEAD_MSG_TYPE], "文字") != 0)
+			continue;
+
+		content = msg->content;
+		zhuanzai_found = is_zhuanzai (content);
+		if (!zhuanzai_found)
+			continue;
+		else
+			zhuanzai_count ++;
+	}
+
+	printf ("%f  link %05d  zhuanzai %05d whole %05d\n", 1.0 * (link_count + zhuanzai_count)/whole_count,
+			link_count, zhuanzai_count, whole_count);
+}
+
+static void
+zhuanzai_count (GList *msgs)
+{
+	GList *l;
+	wechat_msg *msg;
+
+	gint tails = 0;
+	gchar *names[128];
+	gint counts[128];
+	gint i;
+	gint found;
+
+	for (i = 0; i < 128; i++) {
+		names[i] = NULL;
+		counts[i] = 0;
+	}
+
+	for (l = msgs; l; l = l->next) {
+		gchar *content;
+		gchar *name;
+		gchar *p;
+		gint zhuanzai_found;
+
+		msg = (wechat_msg *) (l->data);
+
+		if (strcmp (msg->head[HEAD_MSG_TYPE], "文字") != 0)
+			continue;
+
+		content = msg->content;
+		zhuanzai_found = is_zhuanzai (content);
+		if (!zhuanzai_found)
+			continue;
+		found = 0;
+		name = msg->head[HEAD_NAME];
+		for (i = 0; i < tails; i++) {
+			if (strcmp (names[i], name) == 0) {
+				found = 1;
+				break;
+			}
+		}
+			
+		if (!found) {
+			names[tails] = g_strdup (name);
+			i = tails;
+			tails ++;
+		}
+		counts [i] ++;
+	}
+
+	for (i = 0; i < tails; i++) {
+		printf ("%05d %s\n", counts[i], names[i]);
+	}
+}
+
 int main ()
 {
         gchar *filename = "../data/3537003311@chatroom_20141118091245.txt.utf8-remove-system";
@@ -599,8 +938,14 @@ int main ()
 //	day_count (msgs);
 //	topic_start (msgs);
 //	express_count (msgs);
-	express_rate_count (msgs);
-
+//	express_rate_count (msgs);
+//	pic_count (msgs);
+//	pic_rate_count (msgs);
+/* 就目前而言， link 比较少， 转贴比较少，都归到 whole_zhuanzai_count里面 */
+//	link_count (msgs);
+//	link_rate_count (msgs);
+//	zhuanzai_count (msgs);
+	whole_zhuanzai_count (msgs);
 #ifdef WHOLE_DEBUG
 	for (l = msgs; l; l = l->next) {
 		msg = (wechat_msg *) (l->data);
