@@ -7,6 +7,11 @@ gchar *public_name [] = {
 
 };
 
+
+GList *public_name_alias = NULL;
+gint mentioned_array [54][54];
+gint timeline_array[54][54];
+
 enum msg_type {
 	MSG_WORD,
 	MSG_EXPRESS,
@@ -30,6 +35,11 @@ typedef struct _wechat_msg {
 	gchar *head[5]; 
 	gchar *content;
 } wechat_msg;
+
+typedef struct _name_alias {
+	gchar *name;
+	gint id;
+} name_alias;
 
 enum load_status {
 	LOAD_INIT,
@@ -924,6 +934,448 @@ zhuanzai_count (GList *msgs)
 	}
 }
 
+static void 
+hour_count (GList *msgs)
+{
+	GList *l;
+	wechat_msg *msg;
+
+	gint hour_counts [24];
+	gint i;
+
+	for (i = 0; i < 24; i++) {
+		hour_counts[i] = 0;
+	}
+
+	for (l = msgs; l; l = l->next) {
+		gchar *content;
+		int hour;
+		
+		msg = (wechat_msg *) (l->data);
+
+		content = msg->head[HEAD_TIME];
+		if (!content)
+			continue;
+
+		hour = atoi (content);
+		hour_counts[hour] ++;
+	}
+
+	for (i = 0; i < 24; i++) {
+		printf ("%05d %02d\n", hour_counts[i], i);
+	}
+}
+
+static GList *
+load_name_alias (gchar *filename)
+{
+	char *content;
+	gsize length;
+        gchar **argv;
+	GList *names;
+	GList *l;
+	int i;
+
+	names = NULL;
+        g_file_get_contents (filename, &content, &length, NULL);
+        if (!content)
+                return NULL;
+
+	
+        argv = g_strsplit (content, "\n", -1);
+        for (i = 0; argv[i]; i++) {
+		int j;
+        	gchar **tmp_argv;
+        	tmp_argv = g_strsplit (argv[i], " ", -1);
+	        for (j = 0; tmp_argv[j]; j++) {
+			name_alias *na;
+			if (tmp_argv[j] && (strlen(tmp_argv[j]) > 0)) {
+				na = (name_alias *) malloc (sizeof (name_alias));
+				na->id = i;
+				na->name = g_strdup (tmp_argv[j]);
+				names = g_list_prepend (names, na);
+			}
+	        }
+        	g_strfreev (tmp_argv);
+	}
+
+        g_strfreev (argv);
+        g_free (content);
+
+	return names;
+}
+
+static void
+debug_name_alias (GList *names)
+{
+	GList *l;
+
+	printf ("Debug name alias\n");
+	for (l = names; l; l = l->next) {
+		name_alias *na;
+		na = (name_alias *) l->data;
+		printf ("name <%s>, id <%d>\n", na->name, na->id);
+	}
+}
+
+static int
+find_id_by_name (GList *names, gchar *msg_name)
+{
+	GList *l;
+	name_alias *na;
+	if ((names == NULL) || (msg_name == NULL))
+		return -1;
+
+	for (l = names; l; l = l->next) {
+		na = (name_alias *) l->data;
+		if (strcmp (na->name, msg_name) == 0) {
+			return na->id;
+		}
+	}
+	return -1;
+}
+
+static char *
+find_name_by_id (GList *names, gint id)
+{
+	GList *l;
+	for (l = names; l; l = l->next) {
+		name_alias *na;
+		na = (name_alias *) l->data;
+		if (na->id == id) {
+			return na->name;
+		}
+	}
+	return NULL;
+}
+
+static void
+free_name_alias (GList *names)
+{
+//TODO 
+	name_alias *na;
+}
+
+static void
+mentioned_count (GList *msgs)
+{
+	GList *l, *l_name;
+	wechat_msg *msg;
+	GList *names;
+	gint i, j;
+
+	names = NULL;
+	for (i = 0; i < 54; i++) {
+		for (j = 0; j < 54; j++)
+			mentioned_array [i][j] = 0;
+	}
+	names = public_name_alias;
+//	debug_name_alias (names);
+	for (l = msgs; l; l = l->next) {
+		gchar *msg_name;
+		gint msg_id;
+
+		msg = (wechat_msg *) (l->data);
+		if (msg->content == NULL)
+			continue;
+
+		msg_name = msg->head[HEAD_NAME];
+		msg_id = find_id_by_name (names, msg_name);
+		if (msg_id == -1)
+			continue;
+		/* mention someone */
+		for (l_name = names; l_name; l_name = l_name->next) {
+			name_alias *na;
+			na = (name_alias *) l_name->data;
+			/* special case: "我" should not be searched in content*/
+			if (strcmp (na->name, "我") == 0)
+				continue;
+			if (strstr (msg->content, na->name)) {
+				mentioned_array [msg_id][na->id] ++;
+			}
+		}
+	}
+#if 0
+	for (i = 0; i < 54; i++) {
+		for (j = 0; j < 54; j++) {
+			printf ("%d\t", mentioned_array[i][j]);
+		}
+		printf ("\n");
+	}
+#endif
+}
+
+static void
+certain_mentioned_name (gchar *c_name, gint all_debug)
+{
+	gint s_id;
+	gint s_count[3];
+	gint s_i, s_loop;
+	GList *names;
+
+	names = public_name_alias;
+
+	s_id = find_id_by_name (names, c_name);
+	for (s_i = 0; s_i < 3; s_i ++) {
+		s_count[s_i] = 0;
+	}
+	gchar *s_max_name;
+	gint s_max_id = 0;
+	gint s_max_count = 0;
+	for (s_loop = 0; s_loop < 54; s_loop ++) {
+		gint s_loop_count;
+		s_loop_count = mentioned_array[s_id][s_loop];
+		if (s_loop_count > s_max_count) {
+			s_max_count = s_loop_count;
+			s_max_id = s_loop;
+		}
+	}
+	s_max_name = find_name_by_id (names, s_max_id);
+	printf ("%s mentions %s most, %d.\n", c_name, s_max_name, s_max_count);
+
+	s_max_id = 0;
+	s_max_count = 0;
+	for (s_loop = 0; s_loop < 54; s_loop ++) {
+		gint s_loop_count;
+		s_loop_count = mentioned_array[s_loop][s_id];
+		if (s_loop_count > s_max_count) {
+			s_max_count = s_loop_count;
+			s_max_id = s_loop;
+		}
+	}
+	s_max_name = find_name_by_id (names, s_max_id);
+	printf ("%s is mentioned by %s most, %d.\n", c_name, s_max_name, s_max_count);
+
+	if (!all_debug)
+		return ;
+
+	printf ("\n\nAll loved\n");
+	for (s_loop = 0; s_loop < 54; s_loop ++) {
+		gint s_loop_count;
+		gchar *s_loop_name;
+
+		s_loop_count = mentioned_array[s_id][s_loop];
+		if (s_loop_count < 10)
+			continue;
+		s_loop_name = find_name_by_id (names, s_loop);
+		
+		printf ("%s %d\n", s_loop_name, s_loop_count);
+	}
+
+	printf ("\n\nAll been loved\n");
+	for (s_loop = 0; s_loop < 54; s_loop ++) {
+		gint s_loop_count;
+		gchar *s_loop_name;
+
+		s_loop_count = mentioned_array[s_loop][s_id];
+		if (s_loop_count < 10)
+			continue;
+		s_loop_name = find_name_by_id (names, s_loop);
+		
+		printf ("%s %d\n", s_loop_name, s_loop_count);
+	}
+}
+
+static int
+calculate_score (gchar *msg_time, gchar *msg_part_time)
+{
+	gint msg_i;
+	gint msg_part_i;
+	gint gap;
+        char *p;
+	if (msg_time == NULL)
+		return -1;
+	if (msg_part_time == NULL)
+		return -1;
+
+        p = strchr (msg_time, ':');
+	if (!p)
+		return -1;
+        msg_i = atoi (msg_time)*60+ atoi(p+1);
+
+        p = strchr (msg_part_time, ':');
+	if (!p)
+		return -1;
+        msg_part_i = atoi (msg_part_time)*60+ atoi(p+1);
+
+	if (msg_part_i == msg_i) {
+	}
+	if (msg_part_i < msg_i)
+		msg_part_i + 60*24;
+	gap = msg_part_i - msg_i;
+	if (gap <= 1) {
+		/* in one minute */
+		return 2;
+	} else if (gap <= 5) {
+		return 1;
+	}
+
+	return -1;
+}
+
+static void
+timeline_count (GList *msgs)
+{
+	GList *l, *l_name;
+	wechat_msg *msg;
+	GList *names;
+	gint i, j;
+
+	names = NULL;
+	for (i = 0; i < 54; i++) {
+		for (j = 0; j < 54; j++)
+			timeline_array [i][j] = 0;
+	}
+	names = public_name_alias;
+	for (l = msgs; l; l = l->next) {
+		gchar *msg_name;
+		gint msg_id;
+		gchar *msg_time;
+
+		msg = (wechat_msg *) (l->data);
+		if (msg->content == NULL)
+			continue;
+
+		msg_name = msg->head[HEAD_NAME];
+		msg_time = msg->head[HEAD_TIME];
+		msg_id = find_id_by_name (names, msg_name);
+		if (msg_id == -1)
+			continue;
+
+		GList *l_part;
+		wechat_msg *msg_part;
+		gchar *msg_name_part;
+		gint msg_id_part;
+		int score_part;
+		/* followed by someone */
+		for (l_part = l->next; l_part; l_part = l_part->next) {
+			msg_part = (wechat_msg *) l_part->data;
+			msg_name_part = msg_part->head[HEAD_NAME];
+			msg_id_part = find_id_by_name (names, msg_name_part);
+
+			if (msg_id_part == -1)
+				continue;
+			score_part = calculate_score (msg_time, msg_part->head[HEAD_TIME]);
+			if (score_part < 0) {
+				break;
+			} else if (msg_id == msg_id_part) {
+				/* 自言自语 */
+				/* 自言自语的意义是：当自言自语很多的时候，意味着这个人比较热情，有问必答
+					                         少的时候，意味着简洁明了 */
+				timeline_array [msg_id][msg_id_part] += score_part;
+				/* break， 防止重复统计 */
+				break;
+			} else
+				timeline_array [msg_id][msg_id_part] += score_part;
+		}
+	}
+}
+
+static void
+certain_timeline_name (gchar *c_name, int all_debug)
+{
+	gint s_id;
+	gint s_count[3];
+	gint s_i, s_loop;
+	GList *names;
+
+	names = public_name_alias;
+
+	s_id = find_id_by_name (names, c_name);
+	for (s_i = 0; s_i < 3; s_i ++) {
+		s_count[s_i] = 0;
+	}
+	gchar *s_max_name;
+	gint s_max_id = 0;
+	gint s_max_count = 0;
+	for (s_loop = 0; s_loop < 54; s_loop ++) {
+		gint s_loop_count;
+		/*不统计自己*/
+		if (s_id == s_loop)
+			continue;
+		s_loop_count = timeline_array[s_id][s_loop];
+		if (s_loop_count > s_max_count) {
+			s_max_count = s_loop_count;
+			s_max_id = s_loop;
+		}
+	}
+	s_max_name = find_name_by_id (names, s_max_id); 
+	printf ("%s followed by %s most, %d.  自言自语: %d\n", c_name, s_max_name, s_max_count, timeline_array[s_id][s_id]);
+
+	s_max_id = 0;
+	s_max_count = 0;
+	for (s_loop = 0; s_loop < 54; s_loop ++) {
+		gint s_loop_count;
+		/*不统计自己*/
+		if (s_id == s_loop)
+			continue;
+		s_loop_count = timeline_array[s_loop][s_id];
+		if (s_loop_count > s_max_count) {
+			s_max_count = s_loop_count;
+			s_max_id = s_loop;
+		}
+	}
+	s_max_name = find_name_by_id (names, s_max_id);
+	printf ("%s talked to %s most, %d  自言自语: %d\n", c_name, s_max_name, s_max_count, timeline_array[s_id][s_id]);
+
+	if (!all_debug)
+		return;
+	printf ("\n\nAll loved\n");
+	for (s_loop = 0; s_loop < 54; s_loop ++) {
+		gint s_loop_count;
+		gchar *s_loop_name;
+
+		s_loop_count = timeline_array[s_id][s_loop];
+		if (s_loop_count < 10)
+			continue;
+		s_loop_name = find_name_by_id (names, s_loop);
+		
+		printf ("%s %d\n", s_loop_name, s_loop_count);
+	}
+
+	printf ("\n\nAll been loved\n");
+	for (s_loop = 0; s_loop < 54; s_loop ++) {
+		gint s_loop_count;
+		gchar *s_loop_name;
+
+		s_loop_count = timeline_array[s_loop][s_id];
+		if (s_loop_count < 10)
+			continue;
+		s_loop_name = find_name_by_id (names, s_loop);
+		
+		printf ("%s %d\n", s_loop_name, s_loop_count);
+	}
+}
+
+/*计算说话简洁明了*/
+static void
+cool_timeline_count ()
+{
+	gint max_count;
+	gint max_id;
+	gint gap;
+	GList *names;
+
+	names = public_name_alias;
+
+	int i, j;
+
+	for (i = 0; i < 54; i++) {
+		max_count = 0;
+		max_id = i;
+		for (j = 0; j < 54; j++) {
+			if (j == i)
+				continue;
+			if (timeline_array[i][j] > max_count) {
+				max_count = timeline_array[i][j];
+				max_id = j;
+			}
+		}
+		gap = max_count - timeline_array[i][i];
+		printf ("%03d %s\n", gap, find_name_by_id (names, i));
+	} 
+}
+
 int main ()
 {
         gchar *filename = "../data/3537003311@chatroom_20141118091245.txt.utf8-remove-system";
@@ -931,6 +1383,7 @@ int main ()
 	GList *l;
 	wechat_msg *msg;
 
+	public_name_alias = load_name_alias ("./name");
 	msgs = load_content (filename);
 
 //	user_count (msgs);
@@ -945,12 +1398,33 @@ int main ()
 //	link_count (msgs);
 //	link_rate_count (msgs);
 //	zhuanzai_count (msgs);
-	whole_zhuanzai_count (msgs);
+//	whole_zhuanzai_count (msgs);
+//	hour_count (msgs);
+
+	mentioned_count (msgs);
+	certain_mentioned_name ("hopelovesboy", 0);
+	certain_mentioned_name ("Spring", 0);
+
+	timeline_count (msgs);
+	certain_timeline_name ("hopelovesboy", 0);
+	certain_timeline_name ("Spring", 0);
+#define DEBUG_T_ALL 0
+#if DEBUG_T_ALL
+	int i; 
+	for (i = 0; i < 54; i++) {
+		gchar *ctn = find_name_by_id (public_name_alias, i);
+		certain_timeline_name (ctn, 0);
+	}
+#endif
+	cool_timeline_count ();
+
 #ifdef WHOLE_DEBUG
 	for (l = msgs; l; l = l->next) {
 		msg = (wechat_msg *) (l->data);
 		msg_debug (msg);
 	}
 #endif
+	//TODO free msgs
+	free_name_alias (public_name_alias);
 	return 0;
 }
