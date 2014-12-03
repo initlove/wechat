@@ -391,6 +391,45 @@ if_new_topic (wechat_msg *msg, wechat_msg *last_msg)
 	}
 }
 
+static int
+is_shafa (wechat_msg *msg, wechat_msg *next_msg)
+{
+	if ((msg == NULL) || (next_msg == NULL))
+		return 0;
+
+	gchar *new_time = msg->head[HEAD_TIME];
+	gchar *last_time = next_msg->head[HEAD_TIME];
+	gint new_i;
+	gint last_i;
+	gint gap;
+        char *p;
+	if (new_time == NULL)
+		return 0;
+	if (last_time == NULL)
+		return 0;
+
+        p = strchr (new_time, ':');
+	if (!p)
+		return 0;
+        new_i = atoi (new_time)*60+ atoi(p+1);
+
+        p = strchr (last_time, ':');
+	if (!p)
+		return 1;
+        last_i = atoi (last_time)*60+ atoi(p+1);
+
+	if (new_i < last_i)
+		new_i + 60*24;
+	gap = new_i - last_i;
+	
+/* 5分钟内响应算沙发 */
+	if (gap < 5) {
+		return 1;
+	} else {
+		return 0;
+	}
+}
+
 /* who start most topic with reply */
 static void
 topic_start (GList *msgs)
@@ -399,9 +438,12 @@ topic_start (GList *msgs)
 	wechat_msg *msg;
 
 	gint new_tails = 0;
+	gint shafa_tails = 0;
 	gint end_tails = 0;
 	gchar *new_names[128];
 	gint new_counts[128];
+	gchar *shafa_names[128];
+	gint shafa_counts[128];
 	gchar *end_names[128];
 	gint end_counts[128];
 	gint i;
@@ -411,6 +453,8 @@ topic_start (GList *msgs)
 	for (i = 0; i < 128; i++) {
 		new_names[i] = NULL;
 		new_counts[i] = 0;
+		shafa_names[i] = NULL;
+		shafa_counts[i] = 0;
 		end_names[i] = NULL;
 		end_counts[i] = 0;
 	}
@@ -446,6 +490,32 @@ topic_start (GList *msgs)
 			}
 			new_counts [new_i] ++;
 		}
+
+		/*沙发*/
+		GList *next_l;
+		wechat_msg *next_msg = NULL;
+		next_l = l->next;
+		if (new_topic && next_l) {
+			next_msg = (wechat_msg *) next_l->data;
+			if (is_shafa (msg, next_msg)) {
+				gint shafa_i;
+				gchar *shafa_name = next_msg->head[HEAD_NAME];
+				found = 0;
+				for (shafa_i = 0; shafa_i < shafa_tails; shafa_i++) {
+					if (strcmp (shafa_names[shafa_i], shafa_name) == 0) {
+						found = 1;
+						break;
+					}
+				}
+				if (!found) {
+					shafa_names[shafa_i] = g_strdup (shafa_name);
+					shafa_i = shafa_tails;
+					shafa_tails ++;
+				}
+				shafa_counts[shafa_i]++;
+			}
+		}
+
 		/*话题终结者 */
 		if (new_topic && (last_msg)) {
 			gint end_i;
@@ -472,6 +542,10 @@ topic_start (GList *msgs)
 		printf ("%05d [%s]\n", new_counts[i], new_names[i]);
 	}
 
+	printf ("\n\nShafa topic\n");
+	for (i = 0; i < shafa_tails; i++) {
+		printf ("%05d [%s]\n", shafa_counts[i], shafa_names[i]);
+	}
 	printf ("\n\nEnd topic\n");
 	for (i = 0; i < end_tails; i++) {
 		printf ("%05d [%s]\n", end_counts[i], end_names[i]);
