@@ -3,14 +3,20 @@
 #include <stdlib.h>
 #include <string.h>
 
-gchar *public_name [] = {
-
-};
-
 
 GList *public_name_alias = NULL;
 gint mentioned_array [54][54];
+gint mentioned_count [54];
+gint been_mentioned_count [54];
+float mentioned_rate_array [54][54];
+float been_mentioned_rate_array [54][54];
+
 gint timeline_array[54][54];
+/*bf: been follow; f: follow */
+gint timeline_bf_count [54];
+gint timeline_f_count [54];
+float timeline_bf_rate_array[54][54];
+float timeline_f_rate_array[54][54];
 
 enum msg_type {
 	MSG_WORD,
@@ -1057,7 +1063,7 @@ free_name_alias (GList *names)
 }
 
 static void
-mentioned_count (GList *msgs)
+mentioned_calculate (GList *msgs)
 {
 	GList *l, *l_name;
 	wechat_msg *msg;
@@ -1095,6 +1101,40 @@ mentioned_count (GList *msgs)
 			}
 		}
 	}
+	for (i = 0; i < 54; i++) {
+		mentioned_count [i] = 0;
+		for (j = 0; j < 54; j++) {
+			if (i != j)
+				mentioned_count [i] += mentioned_array [i][j];
+		}
+	}
+	for (j = 0; j < 54; j++) {
+		been_mentioned_count [j] = 0;
+		for (i = 0; i < 54; i++) {
+			if (i != j)
+				been_mentioned_count [j] += mentioned_array [i][j];
+		}
+	}
+
+	for (i = 0; i < 54; i++) {
+		for (j = 0; j < 54; j++) {
+			if (mentioned_count [i] == 0) {
+				mentioned_rate_array[i][j] = 0.0;
+			} else {
+				mentioned_rate_array[i][j] = 1.0 * mentioned_array[i][j] / mentioned_count[i];
+			}
+		}
+	}
+
+	for (j = 0; j < 54; j++) {
+		for (i = 0; i < 54; i++) {
+			if (been_mentioned_count [j] == 0) {
+				been_mentioned_rate_array[i][j] = 0.0;
+			} else {
+				been_mentioned_rate_array[i][j] = 1.0 * mentioned_array[i][j] / been_mentioned_count[j];
+			}
+		}
+	}
 #if 0
 	for (i = 0; i < 54; i++) {
 		for (j = 0; j < 54; j++) {
@@ -1108,72 +1148,96 @@ mentioned_count (GList *msgs)
 static void
 certain_mentioned_name (gchar *c_name, gint all_debug)
 {
-	gint s_id;
-	gint s_count[3];
-	gint s_i, s_loop;
+	gint c_id;
+	gchar *m_name;
 	GList *names;
 
 	names = public_name_alias;
 
-	s_id = find_id_by_name (names, c_name);
-	for (s_i = 0; s_i < 3; s_i ++) {
-		s_count[s_i] = 0;
+	c_id = find_id_by_name (names, c_name);
+
+	gint i;
+	printf ("----- %s mentioned begin ------\n", c_name);
+	for (i = 0; i < 54; i++) {
+		m_name = find_name_by_id (names, i);
+		if (m_name == NULL)
+			continue;
+		printf ("%02d %f %s\n", mentioned_array [c_id][i], mentioned_rate_array[c_id][i], m_name);
+
 	}
-	gchar *s_max_name;
-	gint s_max_id = 0;
-	gint s_max_count = 0;
-	for (s_loop = 0; s_loop < 54; s_loop ++) {
-		gint s_loop_count;
-		s_loop_count = mentioned_array[s_id][s_loop];
-		if (s_loop_count > s_max_count) {
-			s_max_count = s_loop_count;
-			s_max_id = s_loop;
+	printf ("----- %s mentioned end ------\n", c_name);
+}
+
+static void
+all_mentioned_name ()
+{
+	gint i, j;
+	gchar *i_name, *j_name;
+	GList *names;
+
+	names = public_name_alias;
+
+	printf ("----- all mentioned begin ------\n");
+	for (i = 0; i < 54; i++) {
+		for (j = 0; j < 54; j++) {
+			if (i == j)
+				continue;
+			i_name = find_name_by_id (names, i);
+			j_name = find_name_by_id (names, j);
+			if ((i_name == NULL) || (j_name == NULL))
+				continue;
+			printf ("%f %s %s  %d\n", mentioned_rate_array [i][j], i_name, j_name, mentioned_array[i][j]);
 		}
 	}
-	s_max_name = find_name_by_id (names, s_max_id);
-	printf ("%s mentions %s most, %d.\n", c_name, s_max_name, s_max_count);
+	printf ("----- all mentioned end ------\n");
+}
 
-	s_max_id = 0;
-	s_max_count = 0;
-	for (s_loop = 0; s_loop < 54; s_loop ++) {
-		gint s_loop_count;
-		s_loop_count = mentioned_array[s_loop][s_id];
-		if (s_loop_count > s_max_count) {
-			s_max_count = s_loop_count;
-			s_max_id = s_loop;
+static void
+all_been_mentioned_name ()
+{
+	gint i, j;
+	gchar *i_name, *j_name;
+	GList *names;
+
+	names = public_name_alias;
+
+	printf ("----- all been mentioned begin ------\n");
+	for (i = 0; i < 54; i++) {
+		for (j = 0; j < 54; j++) {
+			if (i == j)
+				continue;
+			i_name = find_name_by_id (names, i);
+			j_name = find_name_by_id (names, j);
+			if ((i_name == NULL) || (j_name == NULL))
+				continue;
+			printf ("%f %s %s  %d\n", been_mentioned_rate_array [i][j], i_name, j_name, mentioned_array[i][j]);
 		}
 	}
-	s_max_name = find_name_by_id (names, s_max_id);
-	printf ("%s is mentioned by %s most, %d.\n", c_name, s_max_name, s_max_count);
+	printf ("----- all been mentioned end ------\n");
+}
 
-	if (!all_debug)
-		return ;
+static void
+certain_been_mentioned_name (gchar *c_name, gint all_debug)
+{
+	gint c_id;
+	gchar *m_name;
+	GList *names;
 
-	printf ("\n\nAll loved\n");
-	for (s_loop = 0; s_loop < 54; s_loop ++) {
-		gint s_loop_count;
-		gchar *s_loop_name;
+	names = public_name_alias;
 
-		s_loop_count = mentioned_array[s_id][s_loop];
-		if (s_loop_count < 10)
+	c_id = find_id_by_name (names, c_name);
+
+	gint i;
+	float rate;
+	printf ("----- %s been mentioned begin ------\n", c_name);
+	for (i = 0; i < 54; i++) {
+		m_name = find_name_by_id (names, i);
+		if (m_name == NULL)
 			continue;
-		s_loop_name = find_name_by_id (names, s_loop);
-		
-		printf ("%s %d\n", s_loop_name, s_loop_count);
-	}
+		printf ("%02d %f %s\n", mentioned_array [i][c_id], been_mentioned_rate_array [i][c_id], m_name);
 
-	printf ("\n\nAll been loved\n");
-	for (s_loop = 0; s_loop < 54; s_loop ++) {
-		gint s_loop_count;
-		gchar *s_loop_name;
-
-		s_loop_count = mentioned_array[s_loop][s_id];
-		if (s_loop_count < 10)
-			continue;
-		s_loop_name = find_name_by_id (names, s_loop);
-		
-		printf ("%s %d\n", s_loop_name, s_loop_count);
 	}
+	printf ("----- %s been mentioned end ------\n", c_name);
 }
 
 static int
@@ -1214,7 +1278,7 @@ calculate_score (gchar *msg_time, gchar *msg_part_time)
 }
 
 static void
-timeline_count (GList *msgs)
+timeline_calculate (GList *msgs)
 {
 	GList *l, *l_name;
 	wechat_msg *msg;
@@ -1269,8 +1333,188 @@ timeline_count (GList *msgs)
 				timeline_array [msg_id][msg_id_part] += score_part;
 		}
 	}
+	for (i = 0; i < 54; i++) {
+		timeline_bf_count [i] = 0;
+		for (j = 0; j < 54; j++) {
+			if (i == j)
+				continue;
+			timeline_bf_count [i] += timeline_array[i][j];
+		}
+	}
+	for (j = 0; j < 54; j++) {
+		timeline_f_count [j] = 0;
+		for (i = 0; i < 54; i++) {
+			if (i == j)
+				continue;
+			timeline_f_count [j] += timeline_array[i][j];
+		}
+	}
+
+
+	for (i = 0; i < 54; i++) {
+		for (j = 0; j < 54; j++) {
+			if (timeline_bf_count [i] == 0) {
+				timeline_bf_rate_array[i][j] = 0.0;
+			} else {
+				timeline_bf_rate_array[i][j] = 1.0 * timeline_array[i][j] / timeline_bf_count[i];
+			}
+		}
+	}
+
+	for (j = 0; j < 54; j++) {
+		for (i = 0; i < 54; i++) {
+			if (timeline_f_count [j] == 0) {
+				timeline_f_rate_array[i][j] = 0.0;
+			} else {
+				timeline_f_rate_array[i][j] = 1.0 * timeline_array[i][j] / timeline_f_count[j];
+			}
+		}
+	}
 }
 
+static void
+certain_timeline_bf_name (gchar *c_name)
+{
+	gint c_id;
+	gchar *m_name;
+	GList *names;
+
+	names = public_name_alias;
+
+	c_id = find_id_by_name (names, c_name);
+
+	gint i;
+	float rate;
+	printf ("----- %s been followed begin ------\n", c_name);
+	for (i = 0; i < 54; i++) {
+		m_name = find_name_by_id (names, i);
+		if (m_name == NULL)
+			continue;
+		printf ("%04d %f %s\n", timeline_array [c_id][i], timeline_bf_rate_array [c_id][i], m_name);
+
+	}
+	printf ("----- %s been followed end ------\n", c_name);
+}
+
+static void
+certain_timeline_f_name (gchar *c_name)
+{
+	gint c_id;
+	gchar *m_name;
+	GList *names;
+
+	names = public_name_alias;
+
+	c_id = find_id_by_name (names, c_name);
+
+	gint i;
+	float rate;
+	printf ("----- %s follows begin ------\n", c_name);
+	for (i = 0; i < 54; i++) {
+		m_name = find_name_by_id (names, i);
+		if (m_name == NULL)
+			continue;
+		printf ("%04d %f %s\n", timeline_array [i][c_id], timeline_f_rate_array [i][c_id], m_name);
+
+	}
+	printf ("----- %s follows end ------\n", c_name);
+}
+
+static void
+all_timeline_bf_name ()
+{
+	gint i, j;
+	gchar *i_name, *j_name;
+	GList *names;
+
+	names = public_name_alias;
+
+	printf ("----- all been followed begin ------\n");
+	for (i = 0; i < 54; i++) {
+		for (j = 0; j < 54; j++) {
+			i_name = find_name_by_id (names, i);
+			j_name = find_name_by_id (names, j);
+			if ((i_name == NULL) || (j_name == NULL))
+				continue;
+			if (i == j) {
+				printf ("%f %s %s  %d - own\n", timeline_bf_rate_array [i][j], i_name, j_name, timeline_array[i][j]);
+			} else
+				printf ("%f %s %s  %d\n", timeline_bf_rate_array [i][j], i_name, j_name, timeline_array[i][j]);
+		}
+	}
+	printf ("----- all been followed end ------\n");
+}
+
+static void
+all_timeline_f_name ()
+{
+	gint i, j;
+	gchar *i_name, *j_name;
+	GList *names;
+
+	names = public_name_alias;
+
+	printf ("----- all follows begin ------\n");
+	for (i = 0; i < 54; i++) {
+		for (j = 0; j < 54; j++) {
+			i_name = find_name_by_id (names, i);
+			j_name = find_name_by_id (names, j);
+			if ((i_name == NULL) || (j_name == NULL))
+				continue;
+			if (i == j) {
+				printf ("%f %s %s  %d - own\n", timeline_f_rate_array [i][j], i_name, j_name, timeline_array[i][j]);
+			} else
+				printf ("%f %s %s  %d\n", timeline_f_rate_array [i][j], i_name, j_name, timeline_array[i][j]);
+		}
+	}
+	printf ("----- all follows end ------\n");
+}
+
+static void
+all_timeline_bf_star ()
+{
+	float star[54];
+
+	int i, j;
+
+	printf ("----- all been followed star begin 谁的粉丝最多 ------\n");
+	for (i = 0; i < 54; i++) {
+		star[i] = 0.0;
+		for (j = 0; j < 54; j++) {
+			if (i == j)
+				continue;
+			star[i] += timeline_f_rate_array[i][j];
+		}
+		gchar *name = find_name_by_id (public_name_alias, i);
+		if (name)
+			printf ("%f %s\n", star[i], name);
+	}
+	printf ("----- all been followed star end ------\n");
+}
+
+static void
+all_timeline_f_star ()
+{
+	float star[54];
+
+	int i, j;
+
+	printf ("----- all follow others 谁是最捧场的 ------\n");
+	for (j = 0; j < 54; j++) {
+		star[j] = 0.0;
+		for (i = 0; i < 54; i++) {
+			if (i == j)
+				continue;
+			star[j] += timeline_bf_rate_array[i][j];
+		}
+		gchar *name = find_name_by_id (public_name_alias, j);
+		if (name)
+			printf ("%f %s\n", star[j], name);
+	}
+	printf ("----- all follow others  end ------\n");
+}
+
+/* old version */
 static void
 certain_timeline_name (gchar *c_name, int all_debug)
 {
@@ -1349,7 +1593,7 @@ certain_timeline_name (gchar *c_name, int all_debug)
 
 /*计算说话简洁明了*/
 static void
-cool_timeline_count ()
+cool_timeline_calculate ()
 {
 	gint max_count;
 	gint max_id;
@@ -1401,13 +1645,33 @@ int main ()
 //	whole_zhuanzai_count (msgs);
 //	hour_count (msgs);
 
-	mentioned_count (msgs);
-	certain_mentioned_name ("hopelovesboy", 0);
-	certain_mentioned_name ("Spring", 0);
+	gchar *c_name;
 
-	timeline_count (msgs);
-	certain_timeline_name ("hopelovesboy", 0);
-	certain_timeline_name ("Spring", 0);
+	mentioned_calculate (msgs);
+	gint cmn_all_debug = 0;
+	c_name = "hopelovesboy";
+	c_name = "Spring";
+//	certain_mentioned_name (c_name, cmn_all_debug);
+//	certain_been_mentioned_name (c_name, cmn_all_debug);
+//	all_mentioned_name ();
+//	all_been_mentioned_name ();
+	
+#if 1
+	timeline_calculate (msgs);
+
+	c_name = "hopelovesboy";
+	c_name = "Spring";
+//	certain_timeline_bf_name (c_name);
+//	certain_timeline_f_name (c_name);
+//	all_timeline_bf_name ();
+//	all_timeline_f_name ();
+// shoud run certain timeline first
+//	cool_timeline_calculate ();
+
+//	all_timeline_bf_star ();
+	all_timeline_f_star ();
+#endif
+
 #define DEBUG_T_ALL 0
 #if DEBUG_T_ALL
 	int i; 
@@ -1416,7 +1680,6 @@ int main ()
 		certain_timeline_name (ctn, 0);
 	}
 #endif
-	cool_timeline_count ();
 
 #ifdef WHOLE_DEBUG
 	for (l = msgs; l; l = l->next) {
